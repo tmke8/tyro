@@ -1,10 +1,12 @@
 """Test helptext from `dataclasses.field(doc=...)`, which was added in Python 3.14.
 
-This test file requires Python 3.14+.
+This test file requires Python 3.14+. The `# type: ignore` comments are needed
+because the type checkers in CI are configured for Python <3.14, where the `doc`
+argument doesn't exist yet.
 """
 
 import dataclasses
-from typing import Any
+from dataclasses import field
 
 from helptext_utils import get_helptext_with_checks
 from typing_extensions import Annotated, Doc
@@ -12,18 +14,11 @@ from typing_extensions import Annotated, Doc
 import tyro
 
 
-def field_with_doc(doc: str, **kwargs: Any) -> Any:
-    """Thin wrapper around `dataclasses.field(doc=...)`. The type checkers in
-    CI are configured for Python <3.14, where the `doc` argument doesn't exist
-    yet."""
-    return dataclasses.field(doc=doc, **kwargs)  # type: ignore
-
-
 def test_field_doc_basic() -> None:
     @dataclasses.dataclass
     class Config:
-        x: int = field_with_doc("Documentation for x.")
-        y: str = field_with_doc("Documentation for y.", default="hi")
+        x: int = field(doc="Documentation for x.")  # type: ignore
+        y: str = field(default="hi", doc="Documentation for y.")  # type: ignore
 
     helptext = get_helptext_with_checks(Config)
     assert "Documentation for x." in helptext
@@ -33,21 +28,22 @@ def test_field_doc_basic() -> None:
 def test_field_doc_with_default_factory() -> None:
     @dataclasses.dataclass
     class Config:
-        x: list[int] = field_with_doc("Documentation for x.", default_factory=list)
+        x: list[int] = field(default_factory=list, doc="Documentation for x.")  # type: ignore
 
     assert "Documentation for x." in get_helptext_with_checks(Config)
+
+
+MULTILINE_DOC = """
+    This is a multiline
+    documentation string
+    that should be dedented.
+    """
 
 
 def test_field_doc_multiline_dedent() -> None:
     @dataclasses.dataclass
     class Config:
-        x: int = field_with_doc(
-            """
-            This is a multiline
-            documentation string
-            that should be dedented.
-            """
-        )
+        x: int = field(doc=MULTILINE_DOC)  # type: ignore
 
     helptext = get_helptext_with_checks(Config)
     assert "multiline documentation" in helptext
@@ -58,12 +54,12 @@ def test_field_doc_multiline_dedent() -> None:
 class Inner:
     """Inner docstring."""
 
-    a: int = field_with_doc("Documentation for a.", default=1)
+    a: int = field(default=1, doc="Documentation for a.")  # type: ignore
 
 
 @dataclasses.dataclass
 class Outer:
-    inner: Inner = field_with_doc("Documentation for inner.", default_factory=Inner)
+    inner: Inner = field(default_factory=Inner, doc="Documentation for inner.")  # type: ignore
 
 
 def test_field_doc_nested() -> None:
@@ -77,8 +73,8 @@ def test_field_doc_overrides_docstring_and_comment() -> None:
     @dataclasses.dataclass
     class Config:
         # Comment for x.
-        x: int = field_with_doc("Field doc for x.")
-        y: int = field_with_doc("Field doc for y.")
+        x: int = field(doc="Field doc for x.")  # type: ignore
+        y: int = field(doc="Field doc for y.")  # type: ignore
         """Attribute docstring for y."""
 
     helptext = get_helptext_with_checks(Config)
@@ -91,9 +87,7 @@ def test_field_doc_overrides_docstring_and_comment() -> None:
 def test_pep727_doc_overrides_field_doc() -> None:
     @dataclasses.dataclass
     class Config:
-        x: Annotated[int, Doc("PEP 727 doc for x.")] = field_with_doc(
-            "Field doc for x."
-        )
+        x: Annotated[int, Doc("PEP 727 doc for x.")] = field(doc="Field doc for x.")  # type: ignore
 
     helptext = get_helptext_with_checks(Config)
     assert "PEP 727 doc for x." in helptext
@@ -103,27 +97,25 @@ def test_pep727_doc_overrides_field_doc() -> None:
 def test_arg_help_overrides_field_doc() -> None:
     @dataclasses.dataclass
     class Config:
-        x: Annotated[int, tyro.conf.arg(help="Arg help for x.")] = field_with_doc(
-            "Field doc for x."
-        )
+        x: Annotated[int, tyro.conf.arg(help="Help for x.")] = field(doc="Doc for x.")  # type: ignore
         y: Annotated[
-            int, tyro.conf.arg(help="Arg help for y."), Doc("PEP 727 doc for y.")
-        ] = field_with_doc("Field doc for y.")
+            int, tyro.conf.arg(help="Help for y."), Doc("PEP 727 documentation for y.")
+        ] = field(doc="Doc for y.")  # type: ignore
 
     helptext = get_helptext_with_checks(Config)
-    assert "Arg help for x." in helptext
-    assert "Field doc for x." not in helptext
-    assert "Arg help for y." in helptext
-    assert "PEP 727 doc for y." not in helptext
-    assert "Field doc for y." not in helptext
+    assert "Help for x." in helptext
+    assert "Doc for x." not in helptext
+    assert "Help for y." in helptext
+    assert "PEP 727 documentation for y." not in helptext
+    assert "Doc for y." not in helptext
 
 
 def test_field_doc_falls_back_to_docstring_when_unset() -> None:
     @dataclasses.dataclass
     class Config:
-        x: int = dataclasses.field(default=3)
+        x: int = field(default=3)
         """Attribute docstring for x."""
-        y: int = field_with_doc("Field doc for y.", default=4)
+        y: int = field(default=4, doc="Field doc for y.")  # type: ignore
 
     helptext = get_helptext_with_checks(Config)
     assert "Attribute docstring for x." in helptext
